@@ -1,0 +1,748 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Transporte Express GT - Control de Fletes (Final)</title>
+
+  <!-- Librerías -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+
+  <style>
+    :root{
+      --bg:#f0fbfb;
+      --card:#ffffff;
+      --accent:#06b6d4; /* turquesa */
+      --accent-2:#0ea5a4;
+      --muted:#475569;
+      --glass: rgba(6,182,212,0.08);
+      --danger:#ef4444;
+    }
+    *{box-sizing:border-box;font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Arial}
+    body{margin:0;background:linear-gradient(180deg,#eafffb 0%, #f0fbfb 100%);color:#04293a;padding:18px}
+    .container{max-width:1200px;margin:0 auto}
+    header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
+    .brand{display:flex;align-items:center;gap:12px}
+    .brand h1{margin:0;font-size:20px;color:var(--accent)}
+    .brand .tag{font-size:13px;color:var(--muted)}
+    .truck-icon{width:48px;height:48px;background:linear-gradient(180deg,var(--accent),var(--accent-2));display:flex;align-items:center;justify-content:center;border-radius:10px;box-shadow:0 6px 18px rgba(6,182,212,0.15)}
+    .truck-icon svg{width:28px;height:28px;fill:#fff}
+    .grid{display:grid;grid-template-columns:1fr 420px;gap:18px}
+    .card{background:var(--card);padding:16px;border-radius:12px;box-shadow:0 8px 28px rgba(2,6,23,0.06)}
+    label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+    input,select,textarea,button{width:100%;padding:10px;border-radius:10px;border:1px solid rgba(4,41,58,0.06);background:transparent}
+    .row{display:flex;gap:10px}
+    .row> *{flex:1}
+    .small{width:120px}
+    table{width:100%;border-collapse:collapse;margin-top:8px}
+    th,td{padding:10px;text-align:left;border-bottom:1px solid rgba(4,41,58,0.06);font-size:13px}
+    .muted{color:var(--muted);font-size:13px}
+    .actions{display:flex;gap:10px;flex-wrap:wrap}
+    .btn{background:var(--accent);color:#fff;border:none;padding:8px 12px;border-radius:8px;cursor:pointer;box-shadow:0 6px 18px rgba(6,182,212,0.12)}
+    .btn.secondary{background:#eef7f7;color:var(--accent);border:1px solid rgba(6,182,212,0.12)}
+    .btn.danger{background:var(--danger);box-shadow:none}
+    .thumb{width:84px;height:56px;object-fit:cover;border-radius:6px;border:1px solid rgba(4,41,58,0.06);cursor:pointer}
+    .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .text-right{text-align:right}
+    .camera-area{display:flex;gap:8px;align-items:center}
+    video{border-radius:8px;border:1px solid rgba(4,41,58,0.06);width:220px;height:140px;object-fit:cover;background:#000}
+    canvas{display:none}
+    .modal{position:fixed;left:0;top:0;width:100%;height:100%;background:rgba(2,6,23,0.5);display:flex;align-items:center;justify-content:center;z-index:999;display:none}
+    .modal .box{background:#fff;padding:18px;border-radius:10px;max-width:720px;width:100%}
+    .sig-pad{border:1px solid rgba(4,41,58,0.08);border-radius:8px;background:#fff}
+    .small-row{display:flex;gap:8px}
+    @media (max-width:980px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="container" id="appRoot">
+    <header>
+      <div class="brand">
+        <div class="truck-icon" aria-hidden="true">
+          <!-- truck SVG -->
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M3 3h13v7h5l3 4v7h-2a2 2 0 0 1-4 0H7a2 2 0 0 1-4 0H1V5a2 2 0 0 1 2-2zm16 9V5h-4v7h4z"/></svg>
+        </div>
+        <div>
+          <h1>Transporte Express GT</h1>
+          <div class="tag">Control de Fletes — Profesional</div>
+        </div>
+      </div>
+      <div style="text-align:right">
+        <div class="muted">Reportes: XLSX • CSV • PDF • DOC</div>
+        <div style="margin-top:6px"><strong id="totalCount">0</strong> fletes • <span id="totalIngresos">Q 0.00</span></div>
+      </div>
+    </header>
+
+    <div class="grid">
+      <main class="card">
+        <form id="fleteForm">
+          <div class="row">
+            <div>
+              <label>Cliente</label>
+              <input id="cliente" required placeholder="Nombre o empresa" />
+            </div>
+            <div>
+              <label>Teléfono</label>
+              <input id="telefono" type="tel" placeholder="+502..." />
+            </div>
+          </div>
+
+          <div class="row" style="margin-top:10px">
+            <div>
+              <label>Dirección origen</label>
+              <input id="origen" placeholder="Dirección origen" />
+            </div>
+            <div>
+              <label>Dirección destino</label>
+              <input id="destino" placeholder="Dirección destino" />
+            </div>
+          </div>
+
+          <label style="margin-top:10px">Artículos</label>
+          <textarea id="articulos" rows="2" placeholder="Descripción de los artículos"></textarea>
+
+          <div class="row" style="margin-top:10px">
+            <div>
+              <label>Precio (Q)</label>
+              <input id="precio" type="number" step="0.01" />
+            </div>
+            <div>
+              <label>Hora</label>
+              <input id="hora" type="time" />
+            </div>
+          </div>
+
+          <div style="margin-top:10px">
+            <label>Tomar foto de identificación</label>
+            <div class="camera-area">
+              <div>
+                <div class="muted" style="font-size:12px">Lado 1</div>
+                <video id="video1" autoplay playsinline></video>
+                <div style="margin-top:6px" class="actions">
+                  <button type="button" id="openCam1" class="btn secondary">Abrir cámara</button>
+                  <button type="button" id="snap1" class="btn">Tomar foto</button>
+                  <input id="file1" type="file" accept="image/*" style="display:none" />
+                </div>
+              </div>
+
+              <div>
+                <div class="muted" style="font-size:12px">Lado 2</div>
+                <video id="video2" autoplay playsinline></video>
+                <div style="margin-top:6px" class="actions">
+                  <button type="button" id="openCam2" class="btn secondary">Abrir cámara</button>
+                  <button type="button" id="snap2" class="btn">Tomar foto</button>
+                  <input id="file2" type="file" accept="image/*" style="display:none" />
+                </div>
+              </div>
+            </div>
+            <canvas id="canvas" width="800" height="600"></canvas>
+          </div>
+
+          <div style="margin-top:12px" class="actions">
+            <button class="btn" id="previewBtn" type="button">Previsualizar y confirmar</button>
+            <button class="btn secondary" type="button" id="addSample">Cargar ejemplo</button>
+            <button class="btn danger" type="button" id="clearAll">Borrar todo</button>
+          </div>
+        </form>
+
+        <section style="margin-top:14px">
+          <div class="controls" style="align-items:center">
+            <label style="margin-right:6px">Reporte</label>
+            <select id="period">
+              <option value="all">Todos</option>
+              <option value="day">Diario</option>
+              <option value="week">Semanal</option>
+              <option value="month">Mensual</option>
+              <option value="year">Anual</option>
+              <option value="range">Por fecha</option>
+            </select>
+            <input type="date" id="fromDate" style="display:none" />
+            <input type="date" id="toDate" style="display:none" />
+            <button id="applyFilter" class="btn secondary">Aplicar</button>
+
+            <!-- Export/Import -->
+            <button id="exportXlsx" class="btn">Exportar .xlsx</button>
+            <button id="exportCsv" class="btn">Exportar .csv</button>
+            <button id="exportPdf" class="btn">Exportar .pdf</button>
+            <button id="exportDoc" class="btn">Exportar .doc</button>
+
+            <input id="importFile" type="file" accept=".csv,.xlsx" style="margin-left:8px" />
+          </div>
+
+          <div style="margin-top:10px;overflow:auto;max-height:360px">
+            <table id="fleteTable">
+              <thead><tr><th>Fecha</th><th>Hora</th><th>Cliente</th><th>Tel</th><th>Origen</th><th>Destino</th><th class="text-right">Precio</th><th>Fotos</th><th>Firmas</th><th></th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+
+      <aside class="card">
+        <div class="muted">Resumen</div>
+        <div style="margin-top:8px">
+          <div class="muted">Total fletes: <span id="totalCountAside">0</span></div>
+          <div class="muted" style="margin-top:6px">Ingresos totales: <strong id="totalIngresosAside">Q 0.00</strong></div>
+        </div>
+
+        <div style="margin-top:12px">
+          <label>Búsqueda rápida por cliente</label>
+          <input id="searchClient" placeholder="Nombre cliente" />
+        </div>
+
+        <div style="margin-top:12px">
+          <small class="muted">Toca la miniatura para ver la imagen en tamaño completo.</small>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- Modal de confirmación + firmas -->
+  <div class="modal" id="confirmModal" role="dialog" aria-modal="true">
+    <div class="box">
+      <h3>Confirma flete</h3>
+      <div id="previewArea" style="margin-top:8px"></div>
+
+      <div style="margin-top:12px">
+        <strong>Firmas</strong>
+        <div style="display:flex;gap:12px;margin-top:8px">
+          <div style="flex:1">
+            <div class="muted">Firma del Cliente</div>
+            <canvas id="sigClient" class="sig-pad" width="320" height="120"></canvas>
+            <div class="small-row" style="margin-top:6px">
+              <button id="clearClient" class="btn secondary" type="button">Borrar</button>
+            </div>
+          </div>
+          <div style="flex:1">
+            <div class="muted">Firma del Piloto</div>
+            <canvas id="sigDriver" class="sig-pad" width="320" height="120"></canvas>
+            <div class="small-row" style="margin-top:6px">
+              <button id="clearDriver" class="btn secondary" type="button">Borrar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+        <button id="cancelPreview" class="btn secondary" type="button">Cancelar</button>
+        <button id="confirmSave" class="btn" type="button">Confirmar y Guardar</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* Transporte Express GT - Final con firmas (cliente + piloto) y confirmación */
+const LS_KEY = 'transporte_express_gt_final_v1'
+let fletes = JSON.parse(localStorage.getItem(LS_KEY) || '[]')
+
+/* DOM refs */
+const form = document.getElementById('fleteForm')
+const tbody = document.querySelector('#fleteTable tbody')
+const totalCount = document.getElementById('totalCount')
+const totalIngresos = document.getElementById('totalIngresos')
+const totalCountAside = document.getElementById('totalCountAside')
+const totalIngresosAside = document.getElementById('totalIngresosAside')
+const period = document.getElementById('period')
+const fromDate = document.getElementById('fromDate')
+const toDate = document.getElementById('toDate')
+const searchClient = document.getElementById('searchClient')
+
+/* camera & canvas */
+const video1 = document.getElementById('video1')
+const video2 = document.getElementById('video2')
+const canvas = document.getElementById('canvas')
+const ctx = canvas.getContext('2d')
+let stream1 = null, stream2 = null
+
+/* modal & sign canvases */
+const confirmModal = document.getElementById('confirmModal')
+const previewArea = document.getElementById('previewArea')
+const sigClient = document.getElementById('sigClient')
+const sigDriver = document.getElementById('sigDriver')
+const sigClientCtx = sigClient.getContext('2d')
+const sigDriverCtx = sigDriver.getContext('2d')
+
+/* helpers */
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,8) }
+function fmt(num){ return 'Q ' + Number(num||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) }
+function save(){ localStorage.setItem(LS_KEY, JSON.stringify(fletes)) }
+
+function escapeHtml(str){ return String(str||'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m]) }
+
+/* camera controls */
+async function openCameraFor(videoEl, which){
+  try{
+    const constraints = { video: { facingMode: "environment", width: {ideal:1280}, height: {ideal:720} }, audio: false }
+    const stream = await navigator.mediaDevices.getUserMedia(constraints)
+    videoEl.srcObject = stream
+    if(which===1) stream1 = stream
+    else stream2 = stream
+  }catch(err){
+    alert('No se pudo abrir la cámara: '+(err.message||err))
+  }
+}
+function stopStream(s){ if(!s) return; s.getTracks().forEach(t=>t.stop()) }
+document.getElementById('openCam1').addEventListener('click', ()=>openCameraFor(video1,1))
+document.getElementById('openCam2').addEventListener('click', ()=>openCameraFor(video2,2))
+
+function captureFromVideo(videoEl){
+  const w = videoEl.videoWidth || 800
+  const h = videoEl.videoHeight || 600
+  canvas.width = w
+  canvas.height = h
+  ctx.drawImage(videoEl, 0, 0, w, h)
+  return canvas.toDataURL('image/jpeg', 0.9)
+}
+
+document.getElementById('snap1').addEventListener('click', ()=>{
+  if(!video1.srcObject){ document.getElementById('file1').click(); return }
+  const data = captureFromVideo(video1)
+  document.getElementById('file1').dataset.data = data
+  alert('Foto Lado 1 tomada')
+  stopStream(stream1); stream1 = null; video1.srcObject = null
+})
+document.getElementById('snap2').addEventListener('click', ()=>{
+  if(!video2.srcObject){ document.getElementById('file2').click(); return }
+  const data = captureFromVideo(video2)
+  document.getElementById('file2').dataset.data = data
+  alert('Foto Lado 2 tomada')
+  stopStream(stream2); stream2 = null; video2.srcObject = null
+})
+
+document.getElementById('file1').addEventListener('change', async (ev)=>{ const f = ev.target.files[0]; if(!f) return; const data = await fileToDataURL(f); ev.target.dataset.data = data })
+document.getElementById('file2').addEventListener('change', async (ev)=>{ const f = ev.target.files[0]; if(!f) return; const data = await fileToDataURL(f); ev.target.dataset.data = data })
+function fileToDataURL(file){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=()=>rej('error'); fr.readAsDataURL(file) }) }
+
+/* signature pad basic (mouse/touch) */
+function initSigPad(canvasEl, ctx){
+  let drawing=false, lastX=0, lastY=0
+  function pointerDown(e){ drawing=true; const p=getPos(e); lastX=p.x; lastY=p.y; }
+  function pointerMove(e){ if(!drawing) return; const p=getPos(e); ctx.beginPath(); ctx.moveTo(lastX,lastY); ctx.lineTo(p.x,p.y); ctx.lineWidth=2; ctx.strokeStyle='#04293a'; ctx.stroke(); lastX=p.x; lastY=p.y; }
+  function pointerUp(e){ drawing=false }
+  function getPos(e){ const rect=canvasEl.getBoundingClientRect(); if(e.touches && e.touches[0]) return {x: e.touches[0].clientX-rect.left, y: e.touches[0].clientY-rect.top}; return {x: e.clientX-rect.left, y: e.clientY-rect.top} }
+  canvasEl.addEventListener('pointerdown', pointerDown)
+  canvasEl.addEventListener('pointermove', pointerMove)
+  window.addEventListener('pointerup', pointerUp)
+  // clear
+  return { clear: ()=>{ ctx.clearRect(0,0,canvasEl.width,canvasEl.height) }, toDataURL: ()=>canvasEl.toDataURL('image/png') }
+}
+const padClient = initSigPad(sigClient, sigClientCtx)
+const padDriver = initSigPad(sigDriver, sigDriverCtx)
+document.getElementById('clearClient').addEventListener('click', ()=>padClient.clear())
+document.getElementById('clearDriver').addEventListener('click', ()=>padDriver.clear())
+
+/* preview + confirm flow */
+document.getElementById('previewBtn').addEventListener('click', ()=>openPreview())
+
+function openPreview(){
+  // collect form data
+  const cliente = document.getElementById('cliente').value.trim()
+  if(!cliente){ return alert('Ingresa nombre del cliente') }
+  const telefono = document.getElementById('telefono').value.trim()
+  const origen = document.getElementById('origen').value.trim()
+  const destino = document.getElementById('destino').value.trim()
+  const articulos = document.getElementById('articulos').value.trim()
+  const precio = parseFloat(document.getElementById('precio').value) || 0
+  const hora = document.getElementById('hora').value
+  const foto1 = document.getElementById('file1').dataset.data || null
+  const foto2 = document.getElementById('file2').dataset.data || null
+
+  // render preview
+  previewArea.innerHTML = `
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <div style="flex:1">
+        <div><strong>Cliente:</strong> ${escapeHtml(cliente)}</div>
+        <div><strong>Tel:</strong> ${escapeHtml(telefono)}</div>
+        <div><strong>Origen:</strong> ${escapeHtml(origen)}</div>
+        <div><strong>Destino:</strong> ${escapeHtml(destino)}</div>
+        <div><strong>Artículos:</strong> ${escapeHtml(articulos)}</div>
+      </div>
+      <div style="width:180px;text-align:right">
+        <div><strong>Precio:</strong> ${fmt(precio)}</div>
+        <div><strong>Hora:</strong> ${escapeHtml(hora)}</div>
+        <div><strong>Fecha:</strong> ${new Date().toISOString().slice(0,10)}</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      ${foto1? `<img src="${foto1}" style="width:160px;height:100px;object-fit:cover;border-radius:6px"/>` : ''}
+      ${foto2? `<img src="${foto2}" style="width:160px;height:100px;object-fit:cover;border-radius:6px"/>` : ''}
+    </div>
+  `
+  // reset signature pads
+  padClient.clear()
+  padDriver.clear()
+  // show modal
+  confirmModal.style.display = 'flex'
+}
+
+/* cancel/confirm */
+document.getElementById('cancelPreview').addEventListener('click', ()=>{ confirmModal.style.display='none' })
+document.getElementById('confirmSave').addEventListener('click', ()=>saveConfirmed())
+
+function saveConfirmed(){
+  // take values again
+  const cliente = document.getElementById('cliente').value.trim()
+  const telefono = document.getElementById('telefono').value.trim()
+  const origen = document.getElementById('origen').value.trim()
+  const destino = document.getElementById('destino').value.trim()
+  const articulos = document.getElementById('articulos').value.trim()
+  const precio = parseFloat(document.getElementById('precio').value) || 0
+  const hora = document.getElementById('hora').value
+  const foto1 = document.getElementById('file1').dataset.data || null
+  const foto2 = document.getElementById('file2').dataset.data || null
+  const sigClientData = padClient.toDataURL()
+  const sigDriverData = padDriver.toDataURL()
+
+  const fecha = new Date().toISOString().slice(0,10)
+  const id = uid()
+  const item = { id, fecha, hora, cliente, telefono, origen, destino, articulos, precio, foto1, foto2, sigClient: sigClientData, sigDriver: sigDriverData }
+  fletes.push(item)
+  fletes.sort((a,b)=> new Date(a.fecha) - new Date(b.fecha))
+  save()
+  render()
+  form.reset()
+  document.getElementById('file1').dataset.data = ''
+  document.getElementById('file2').dataset.data = ''
+  confirmModal.style.display='none'
+}
+
+/* rendering list */
+function render(list = fletes){
+  tbody.innerHTML = ''
+  let ingresos = 0
+  list.forEach(f=>{
+    ingresos += Number(f.precio||0)
+    const tr = document.createElement('tr')
+    tr.innerHTML = `
+      <td>${f.fecha}</td>
+      <td>${f.hora||''}</td>
+      <td>${escapeHtml(f.cliente)}</td>
+      <td>${escapeHtml(f.telefono||'')}</td>
+      <td>${escapeHtml(f.origen||'')}</td>
+      <td>${escapeHtml(f.destino||'')}</td>
+      <td class="text-right">${fmt(f.precio)}</td>
+      <td>
+        ${f.foto1? `<img src="${f.foto1}" class="thumb" data-id="${f.id}" data-side="1" />` : ''}
+        ${f.foto2? `<img src="${f.foto2}" class="thumb" data-id="${f.id}" data-side="2" />` : ''}
+      </td>
+      <td>
+        ${f.sigClient? '<small>Cliente</small><br/><img src="'+f.sigClient+'" style="width:100px;height:36px;object-fit:contain;border:1px solid rgba(4,41,58,0.06);border-radius:4px"/>' : ''}
+        ${f.sigDriver? '<br/><small>Piloto</small><br/><img src="'+f.sigDriver+'" style="width:100px;height:36px;object-fit:contain;border:1px solid rgba(4,41,58,0.06);border-radius:4px"/>' : ''}
+      </td>
+      <td>
+        <div style="display:flex;gap:6px">
+          <button data-id="${f.id}" class="editBtn btn secondary">Editar</button>
+          <button data-id="${f.id}" class="delBtn btn secondary">Eliminar</button>
+        </div>
+      </td>
+    `
+    tbody.appendChild(tr)
+  })
+  totalCount.textContent = list.length
+  totalIngresos.textContent = fmt(ingresos)
+  totalCountAside.textContent = list.length
+  totalIngresosAside.textContent = fmt(ingresos)
+}
+
+/* table click events */
+tbody.addEventListener('click', async (e)=>{
+  const img = e.target.closest('img')
+  if(img && img.classList.contains('thumb')){
+    const src = img.src
+    const w = window.open('')
+    w.document.write('<img src="'+src+'" style="max-width:100%;height:auto"/>')
+    return
+  }
+  if(e.target.classList.contains('delBtn')){
+    const id = e.target.dataset.id
+    if(confirm('Eliminar flete?')){ fletes = fletes.filter(x=>x.id!==id); save(); render() }
+    return
+  }
+  if(e.target.classList.contains('editBtn')){
+    const id = e.target.dataset.id
+    const item = fletes.find(x=>x.id===id)
+    if(!item) return
+    document.getElementById('cliente').value = item.cliente
+    document.getElementById('telefono').value = item.telefono
+    document.getElementById('origen').value = item.origen
+    document.getElementById('destino').value = item.destino
+    document.getElementById('articulos').value = item.articulos
+    document.getElementById('precio').value = item.precio
+    document.getElementById('hora').value = item.hora
+    if(item.foto1) document.getElementById('file1').dataset.data = item.foto1
+    if(item.foto2) document.getElementById('file2').dataset.data = item.foto2
+    if(item.sigClient) document.getElementById('file1').dataset.sigClient = item.sigClient
+    if(item.sigDriver) document.getElementById('file2').dataset.sigDriver = item.sigDriver
+    fletes = fletes.filter(x=>x.id!==id)
+    save()
+    render()
+    window.scrollTo({top:0,behavior:'smooth'})
+    return
+  }
+})
+
+/* Filters & search */
+document.getElementById('applyFilter').addEventListener('click', ()=>{
+  const p = period.value
+  let list = fletes
+  const now = new Date()
+  if(p==='day'){
+    const d = now.toISOString().slice(0,10)
+    list = fletes.filter(f=>f.fecha===d)
+  } else if(p==='week'){
+    const start = new Date(); start.setDate(now.getDate()-6); start.setHours(0,0,0,0)
+    list = fletes.filter(f=> new Date(f.fecha) >= start)
+  } else if(p==='month'){
+    const ym = now.toISOString().slice(0,7)
+    list = fletes.filter(f=> f.fecha.startsWith(ym))
+  } else if(p==='year'){
+    const y = now.getFullYear().toString()
+    list = fletes.filter(f=> f.fecha.startsWith(y))
+  } else if(p==='range'){
+    if(!fromDate.value || !toDate.value){ alert('Selecciona rango'); return }
+    const fdate = new Date(fromDate.value); fdate.setHours(0,0,0,0)
+    const tdate = new Date(toDate.value); tdate.setHours(23,59,59,999)
+    list = fletes.filter(x=>{ const d = new Date(x.fecha); return d>=fdate && d<=tdate })
+  }
+  render(list)
+})
+period.addEventListener('change', ()=>{ if(period.value==='range'){ fromDate.style.display='inline-block'; toDate.style.display='inline-block' } else { fromDate.style.display='none'; toDate.style.display='none' } })
+searchClient.addEventListener('input', ()=>{ const q = searchClient.value.trim().toLowerCase(); if(!q) return render(); render(fletes.filter(f=> (f.cliente||'').toLowerCase().includes(q))) })
+
+/* Import CSV / XLSX */
+document.getElementById('importFile').addEventListener('change', async (ev)=>{
+  const f = ev.target.files[0]; if(!f) return
+  const name = f.name.toLowerCase()
+  const text = await f.arrayBuffer()
+  try{
+    if(name.endsWith('.csv')){
+      const decoder = new TextDecoder('utf-8')
+      const s = decoder.decode(text)
+      const lines = s.split(/\r?\n/).filter(Boolean)
+      const data = lines.slice(1)
+      data.forEach(line=>{
+        const cols = []
+        let cur='', inQ=false
+        for(let i=0;i<line.length;i++){
+          const ch = line[i]
+          if(ch=='"'){ inQ=!inQ; continue }
+          if(ch==',' && !inQ){ cols.push(cur); cur=''; continue }
+          cur += ch
+        }
+        if(cur!=='') cols.push(cur)
+        const [id,fecha,hora,cliente,telefono,origen,destino,articulos,precio,foto1,foto2,sigClient,sigDriver] = cols
+        fletes.push({
+          id: id || uid(),
+          fecha: fecha || new Date().toISOString().slice(0,10),
+          hora: hora || '',
+          cliente: (cliente||'').replace(/""/g,'"'),
+          telefono: telefono || '',
+          origen: origen || '',
+          destino: destino || '',
+          articulos: articulos || '',
+          precio: Number(precio)||0,
+          foto1: foto1 || null,
+          foto2: foto2 || null,
+          sigClient: sigClient || null,
+          sigDriver: sigDriver || null
+        })
+      })
+    } else if(name.endsWith('.xlsx') || name.endsWith('.xls')){
+      const data = new Uint8Array(text)
+      const workbook = XLSX.read(data, {type:'array'})
+      const sheetName = workbook.SheetNames[0]
+      const sheet = workbook.Sheets[sheetName]
+      const json = XLSX.utils.sheet_to_json(sheet, {defval:''})
+      json.forEach(row=>{
+        fletes.push({
+          id: row.id || uid(),
+          fecha: row.fecha || (row.Fecha||new Date().toISOString().slice(0,10)),
+          hora: row.hora || row.Hora || '',
+          cliente: row.cliente || row.Cliente || '',
+          telefono: row.telefono || row.Telefono || '',
+          origen: row.origen || row.Origen || '',
+          destino: row.destino || row.Destino || '',
+          articulos: row.articulos || row.Articulos || '',
+          precio: Number(row.precio || row.Precio || 0),
+          foto1: row.foto1 || '',
+          foto2: row.foto2 || '',
+          sigClient: row.sigClient || '',
+          sigDriver: row.sigDriver || ''
+        })
+      })
+    } else {
+      alert('Formato no soportado. Usa .csv o .xlsx')
+    }
+    save()
+    render()
+  }catch(err){
+    console.error(err); alert('Error importando archivo: '+err)
+  }
+  ev.target.value = ''
+})
+
+/* Export CSV */
+document.getElementById('exportCsv').addEventListener('click', ()=>{
+  const header = ['id','fecha','hora','cliente','telefono','origen','destino','articulos','precio','foto1','foto2','sigClient','sigDriver']
+  const rows = [header.join(',')]
+  fletes.forEach(f=>{
+    const cols = [
+      f.id,
+      f.fecha,
+      f.hora||'',
+      `"${(f.cliente||'').replace(/"/g,'""')}"`,
+      `"${(f.telefono||'').replace(/"/g,'""')}"`,
+      `"${(f.origen||'').replace(/"/g,'""')}"`,
+      `"${(f.destino||'').replace(/"/g,'""')}"`,
+      `"${(f.articulos||'').replace(/"/g,'""')}"`,
+      f.precio||0,
+      f.foto1?f.foto1.replace(/\n/g,''): '',
+      f.foto2?f.foto2.replace(/\n/g,''): '',
+      f.sigClient?f.sigClient.replace(/\n/g,''):'',
+      f.sigDriver?f.sigDriver.replace(/\n/g,''):''
+    ]
+    rows.push(cols.join(','))
+  })
+  const blob = new Blob([rows.join('\n')], {type:'text/csv;charset=utf-8;'})
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a'); a.href=url; a.download='fletes_with_signatures.csv'; a.click(); URL.revokeObjectURL(url)
+})
+
+/* Export XLSX */
+document.getElementById('exportXlsx').addEventListener('click', ()=>{
+  const rows = fletes.map(f=>({
+    id: f.id,
+    fecha: f.fecha,
+    hora: f.hora||'',
+    cliente: f.cliente,
+    telefono: f.telefono||'',
+    origen: f.origen||'',
+    destino: f.destino||'',
+    articulos: f.articulos||'',
+    precio: f.precio||0,
+    foto1: f.foto1||'',
+    foto2: f.foto2||'',
+    sigClient: f.sigClient||'',
+    sigDriver: f.sigDriver||''
+  }))
+  const ws = XLSX.utils.json_to_sheet(rows)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Fletes')
+  const wbout = XLSX.write(wb, {bookType:'xlsx', type:'array'})
+  const blob = new Blob([wbout], {type:'application/octet-stream'})
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a'); a.href=url; a.download='fletes_with_signatures.xlsx'; a.click(); URL.revokeObjectURL(url)
+})
+
+/* Export PDF - incluye firmas */
+document.getElementById('exportPdf').addEventListener('click', async ()=>{
+  const title = 'Transporte Express GT — Reporte de Fletes'
+  const container = document.createElement('div')
+  container.style.padding = '20px'
+  container.style.background = '#ffffff'
+  container.style.color = '#000'
+  container.style.width = '1000px'
+  const header = document.createElement('div')
+  header.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <div>
+      <h2 style="margin:0">${title}</h2>
+      <div>Fecha: ${new Date().toLocaleString()}</div>
+    </div>
+    <div style="text-align:right">
+      <div style="font-weight:700">Transporte Express GT</div>
+      <div style="font-size:12px;color:#666">Reporte generado automáticamente</div>
+    </div>
+  </div><hr />`
+  container.appendChild(header)
+
+  // build a neat table including signature thumbnails
+  const table = document.createElement('table')
+  table.style.width='100%'; table.style.borderCollapse='collapse'
+  const thead = document.createElement('thead')
+  thead.innerHTML = '<tr><th style="padding:6px;border:1px solid #ccc">Fecha</th><th style="padding:6px;border:1px solid #ccc">Hora</th><th style="padding:6px;border:1px solid #ccc">Cliente</th><th style="padding:6px;border:1px solid #ccc">Precio</th><th style="padding:6px;border:1px solid #ccc">Firma Cliente</th><th style="padding:6px;border:1px solid #ccc">Firma Piloto</th></tr>'
+  table.appendChild(thead)
+  const tbodyPdf = document.createElement('tbody')
+  fletes.forEach(f=>{
+    const tr = document.createElement('tr')
+    tr.innerHTML = `<td style="padding:6px;border:1px solid #ccc">${f.fecha}</td>
+      <td style="padding:6px;border:1px solid #ccc">${f.hora||''}</td>
+      <td style="padding:6px;border:1px solid #ccc">${escapeHtml(f.cliente)}</td>
+      <td style="padding:6px;border:1px solid #ccc;text-align:right">${fmt(f.precio)}</td>
+      <td style="padding:6px;border:1px solid #ccc;text-align:center">${f.sigClient?'<img src="'+f.sigClient+'" style="max-width:120px;max-height:60px"/>' : ''}</td>
+      <td style="padding:6px;border:1px solid #ccc;text-align:center">${f.sigDriver?'<img src="'+f.sigDriver+'" style="max-width:120px;max-height:60px"/>' : ''}</td>`
+    tbodyPdf.appendChild(tr)
+  })
+  table.appendChild(tbodyPdf)
+  container.appendChild(table)
+
+  document.body.appendChild(container)
+  try{
+    const canvasImg = await html2canvas(container, {scale:2})
+    const imgData = canvasImg.toDataURL('image/jpeg', 0.95)
+    const { jsPDF } = window.jspdf
+    const pdf = new jsPDF('l','pt','a4')
+    const imgProps = pdf.getImageProperties(imgData)
+    const pdfWidth = pdf.internal.pageSize.getWidth()
+    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width
+    pdf.addImage(imgData, 'JPEG', 0, 20, pdfWidth, pdfHeight)
+    pdf.setFontSize(10)
+    pdf.text('Firma autorizada: ______________________', 40, pdf.internal.pageSize.getHeight()-40)
+    pdf.save('fletes_reporte_transporte_express_gt_signatures.pdf')
+  }catch(err){
+    alert('Error generando PDF: '+err)
+    console.error(err)
+  }finally{
+    container.remove()
+  }
+})
+
+/* Export DOC (Word) */
+document.getElementById('exportDoc').addEventListener('click', ()=>{
+  const title = 'Transporte Express GT — Reporte de Fletes'
+  const headerHtml = `<div style="display:flex;justify-content:space-between;align-items:center">
+    <div>
+      <h2 style="margin:0">${title}</h2>
+      <div>Fecha: ${new Date().toLocaleString()}</div>
+    </div>
+    <div style="text-align:right">
+      <div style="font-weight:700">Transporte Express GT</div>
+    </div>
+  </div><hr />`
+  let rows = ''
+  fletes.forEach(f=>{
+    rows += `<tr>
+      <td>${f.fecha}</td>
+      <td>${f.hora||''}</td>
+      <td>${escapeHtml(f.cliente)}</td>
+      <td style="text-align:right">${fmt(f.precio)}</td>
+      <td>${f.sigClient? '<img src="'+f.sigClient+'" style="max-width:120px;max-height:60px"/>' : ''}</td>
+      <td>${f.sigDriver? '<img src="'+f.sigDriver+'" style="max-width:120px;max-height:60px"/>' : ''}</td>
+    </tr>`
+  })
+  const tableHtml = `<table border="1" style="border-collapse:collapse;width:100%">
+    <thead><tr><th>Fecha</th><th>Hora</th><th>Cliente</th><th>Precio</th><th>Firma Cliente</th><th>Firma Piloto</th></tr></thead>
+    <tbody>${rows}</tbody></table>`
+  const html = `<html><head><meta charset="utf-8"><title>${title}</title></head><body>${headerHtml}${tableHtml}</body></html>`
+  const blob = new Blob(['\ufeff', html], {type: 'application/msword'})
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a'); a.href=url; a.download='fletes_reporte_transporte_express_gt_signatures.doc'; a.click(); URL.revokeObjectURL(url)
+})
+
+/* Other events */
+document.getElementById('clearAll').addEventListener('click', ()=>{ if(confirm('Borrar todos los fletes?')){ fletes=[]; save(); render() } })
+document.getElementById('addSample').addEventListener('click', ()=>{ const s = [
+  {id:uid(), fecha: todayOffset(0), hora:'09:30', cliente:'Transportes Lopez', telefono:'50241234567', origen:'Zona 1', destino:'Ciudad Vieja', articulos:'Muebles', precio:1200, foto1:null, foto2:null, sigClient:null, sigDriver:null},
+  {id:uid(), fecha: todayOffset(-1), hora:'14:00', cliente:'Servicios ABC', telefono:'50241239876', origen:'Mixco', destino:'Amatitlán', articulos:'Electrodomésticos', precio:900, foto1:null, foto2:null, sigClient:null, sigDriver:null}
+]; fletes = fletes.concat(s); save(); render(); })
+function todayOffset(n){ const d=new Date(); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10) }
+
+/* Form submit disabled (we use preview button) */
+form.addEventListener('submit', (e)=>{ e.preventDefault(); openPreview() })
+
+/* init */
+render()
+</script>
+</body>
+</html>
